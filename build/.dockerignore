@@ -1,0 +1,7 @@
+*
+!*.sh
+!*.conf
+!*.cron
+!*.sql
+!status.php
+

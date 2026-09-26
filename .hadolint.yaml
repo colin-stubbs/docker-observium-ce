@@ -1,0 +1,3 @@
+ignored:
+  # Ubuntu security updates; pinning every apt version fights the distro.
+  - DL3008

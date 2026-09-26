@@ -1,97 +1,87 @@
 # Docker container for Observium Community Edition
+#
+# Pin the Ubuntu LTS that ships the PHP series we install. ubuntu:latest
+# tracks the newest release (26.04 Resolute uses PHP 8.5 and has no php8.3-*).
+FROM ubuntu:24.04
 
-FROM ubuntu:latest
+ARG PHP_VERSION=8.3
 
-LABEL maintainer "colin.stubbs@hq.cavalryscout.com"
-LABEL version="1.6"
-LABEL description="Docker container for Observium Community Edition"
+ENV PHP_VERSION=${PHP_VERSION} \
+    LANG=en_US.UTF-8 \
+    LANGUAGE=en_US.UTF-8 \
+    DEBIAN_FRONTEND=noninteractive
 
-# set environment variables
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US.UTF-8
-ENV OBSERVIUM_ADMIN_USER=$OBSERVIUM_ADMIN_USER
-ENV OBSERVIUM_ADMIN_PASS=$OBSERVIUM_ADMIN_PASS
-ENV OBSERVIUM_DB_HOST=$OBSERVIUM_DB_HOST
-ENV OBSERVIUM_DB_USER=$OBSERVIUM_DB_USER
-ENV OBSERVIUM_DB_PASS=$OBSERVIUM_DB_PASS
-ENV OBSERVIUM_DB_NAME=$OBSERVIUM_DB_NAME
-ENV OBSERVIUM_BASE_URL=$OBSERVIUM_BASE_URL
+LABEL maintainer="colin.stubbs@hq.cavalryscout.com" \
+      version="1.9" \
+      description="Docker container for Observium Community Edition"
 
-# install prerequisites and cleanup
-RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# One COPY + one RUN: overlay files and the install stay in a single layer.
+COPY . /tmp/image/
+
 RUN apt-get update && \
-    apt-get install -y php8.3-cli php8.3-mysql php8.3-gd php8.3-bcmath php8.3-mbstring php8.3-opcache \
-    php8.3-curl php-apcu php-pear php8.3-ldap snmp fping mysql-client rrdtool subversion whois mtr-tiny ipmitool \
-    libvirt-clients python3-mysqldb python3-pymysql python-is-python3 libapache2-mod-php8.3 graphviz \
-    imagemagick apache2 && \
-    apt-get install -y libvirt-clients && \
-    apt-get install -y cron curl locales supervisor wget && \
-    apt-get install -y logrotate && \
-    apt-get install -y libphp-phpmailer && \
-    apt-get install -y rsyslog && \
-    apt-get clean all && \
+    apt-get install -y --no-install-recommends \
+      php${PHP_VERSION}-cli php${PHP_VERSION}-mysql php${PHP_VERSION}-gd \
+      php${PHP_VERSION}-bcmath php${PHP_VERSION}-mbstring php${PHP_VERSION}-opcache \
+      php${PHP_VERSION}-curl php${PHP_VERSION}-ldap php${PHP_VERSION}-xml \
+      php-apcu php-pear \
+      libapache2-mod-php${PHP_VERSION} \
+      apache2 \
+      snmp fping mysql-client rrdtool subversion whois mtr-tiny ipmitool \
+      libvirt-clients python3-mysqldb python3-pymysql python-is-python3 \
+      graphviz imagemagick \
+      cron curl locales supervisor wget logrotate libphp-phpmailer rsyslog \
+      ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
     rm -f /etc/apache2/sites-available/* && \
-    rm -f /etc/cron.d/* && \
-    rm -f /etc/cron.hourly/* && \
-    rm -f /etc/cron.daily/* && \
-    rm -f /etc/cron.weekly/* && \
-    rm -f /etc/cron.monthly/* && \
-    rm -f /etc/logrotate.d/* && \
-    rm -f /etc/supervisord/conf.d/* && \
-    rm -fr /var/log/* && \
-    rm -fr /var/www && \
+    rm -f /etc/cron.d/* /etc/cron.hourly/* /etc/cron.daily/* \
+          /etc/cron.weekly/* /etc/cron.monthly/* && \
+    rm -f /etc/logrotate.d/* /etc/supervisord/conf.d/* && \
+    rm -fr /var/log/* /var/www && \
     mkdir /var/log/apache2 && \
     locale-gen en_US.UTF-8 && \
-    mkdir -p /opt/observium /opt/observium/logs /opt/observium/rrd && \
-    cd /opt && \
-    wget http://www.observium.org/observium-community-latest.tar.gz && \
-    tar zxvf observium-community-latest.tar.gz && \
-    rm -f observium-community-latest.tar.gz && \
-    cd /opt/observium && \
-    cp config.php.default config.php && \
-    sed -i -e "s/= 'localhost';/= getenv('OBSERVIUM_DB_HOST');/g" config.php && \
-    sed -i -e "s/= 'USERNAME';/= getenv('OBSERVIUM_DB_USER');/g" config.php && \
-    sed -i -e "s/= 'PASSWORD';/= getenv('OBSERVIUM_DB_PASS');/g" config.php && \
-    sed -i -e "s/= 'observium';/= getenv('OBSERVIUM_DB_NAME');/g" config.php && \
-    echo "\$config['base_url'] = getenv('OBSERVIUM_BASE_URL');" >> config.php
-
-COPY observium-init.sh /opt/observium/observium-init.sh
-COPY apache-init.sh /opt/observium/apache-init.sh
-COPY status.php /opt/observium/html/status.php
-COPY alerting.sql /opt/observium/scripts/alerting.sql
-COPY apache24.conf /etc/apache2/sites-available/000-default.conf
-COPY logrotate.conf /etc/logrotate.conf
-COPY logrotate.cron /etc/cron.d/logrotate
-COPY observium.cron /etc/cron.d/observium
-COPY supervisord.conf /etc/supervisord.conf
-COPY rsyslog.conf /etc/rsyslog.conf
-
-RUN chmod a+x /opt/observium/observium-init.sh /opt/observium/apache-init.sh && \
+    mkdir -p /opt/observium/logs /opt/observium/rrd && \
+    wget -q -O /tmp/observium-community-latest.tar.gz \
+      https://www.observium.org/observium-community-latest.tar.gz && \
+    tar zxf /tmp/observium-community-latest.tar.gz -C /opt && \
+    rm -f /tmp/observium-community-latest.tar.gz && \
+    cp /opt/observium/config.php.default /opt/observium/config.php && \
+    sed -i \
+      -e "s/= 'localhost';/= getenv('OBSERVIUM_DB_HOST');/g" \
+      -e "s/= 'USERNAME';/= getenv('OBSERVIUM_DB_USER');/g" \
+      -e "s/= 'PASSWORD';/= getenv('OBSERVIUM_DB_PASS');/g" \
+      -e "s/= 'observium';/= getenv('OBSERVIUM_DB_NAME');/g" \
+      /opt/observium/config.php && \
+    echo "\$config['base_url'] = getenv('OBSERVIUM_BASE_URL');" >> /opt/observium/config.php && \
+    cp /tmp/image/observium-init.sh /opt/observium/observium-init.sh && \
+    cp /tmp/image/apache-init.sh /opt/observium/apache-init.sh && \
+    cp /tmp/image/status.php /opt/observium/html/status.php && \
+    cp /tmp/image/alerting.sql /opt/observium/scripts/alerting.sql && \
+    cp /tmp/image/apache24.conf /etc/apache2/sites-available/000-default.conf && \
+    cp /tmp/image/logrotate.conf /etc/logrotate.conf && \
+    cp /tmp/image/logrotate.cron /etc/cron.d/logrotate && \
+    cp /tmp/image/observium.cron /etc/cron.d/observium && \
+    cp /tmp/image/supervisord.conf /etc/supervisord.conf && \
+    cp /tmp/image/rsyslog.conf /etc/rsyslog.conf && \
+    rm -rf /tmp/image && \
+    chmod a+x /opt/observium/observium-init.sh /opt/observium/apache-init.sh && \
+    chmod 644 /etc/apache2/sites-available/000-default.conf \
+              /etc/logrotate.conf /etc/cron.d/logrotate /etc/cron.d/observium && \
     chown -R www-data:www-data /opt/observium && \
-    [ -f /opt/observium/VERSION ] && \
-    cat /opt/observium/VERSION && \
-    echo "date.timezone = UTC" > /etc/php/8.3/mods-available/timezone.ini && \
+    test -f /opt/observium/VERSION && cat /opt/observium/VERSION && \
+    echo "date.timezone = UTC" > /etc/php/${PHP_VERSION}/mods-available/timezone.ini && \
     phpenmod timezone && \
-    phpenmod mcrypt && \
     a2dismod mpm_event && \
-    a2enmod mpm_prefork && \
-    a2enmod php8.3 && \
-    a2enmod rewrite && \
-    chmod 644 /etc/apache2/sites-available/000-default.conf && \
-    chmod 644 /etc/logrotate.conf /etc/cron.d/logrotate /etc/cron.d/observium
+    a2enmod mpm_prefork php${PHP_VERSION} rewrite
 
-# configure working directory
 WORKDIR /opt/observium
 
-# configure entry point
-ENTRYPOINT [ "/usr/bin/supervisord", "-c", "/etc/supervisord.conf" ]
+ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
 
-# expose tcp port
-EXPOSE 80/tcp
-EXPOSE 443/tcp
-EXPOSE 514/udp
-EXPOSE 514/tcp
-EXPOSE 6514/tcp
+EXPOSE 80/tcp 443/tcp 514/udp 514/tcp 6514/tcp
 
-# set volumes
-VOLUME ["/opt/observium/logs","/opt/observium/rrd"]
+VOLUME ["/opt/observium/logs", "/opt/observium/rrd"]
+
+HEALTHCHECK --interval=60s --timeout=10s --start-period=3s --retries=3 \
+  CMD ["curl", "--silent", "--fail", "--output", "/dev/null", "http://localhost:80/status.php"]

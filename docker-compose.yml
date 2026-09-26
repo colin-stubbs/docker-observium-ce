@@ -7,6 +7,7 @@ services:
   observium:
     build:
       context: ./build/
+      # Native platform only. Multi-arch (amd64+arm64) is `make build` / `make push`.
     image: docker.io/colinstubbs/observium-ce:latest
     hostname: ${HOSTNAME:-observium}
     domainname: ${DOMAINNAME:-localhost}
