@@ -2,7 +2,7 @@
 #
 # Pin the Ubuntu LTS that ships the PHP series we install. ubuntu:latest
 # tracks the newest release (26.04 Resolute uses PHP 8.5 and has no php8.3-*).
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 ARG PHP_VERSION=8.3
 
