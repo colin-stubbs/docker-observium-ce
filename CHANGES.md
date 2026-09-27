@@ -1,3 +1,8 @@
+* 2026-09-27 09:22 AEST - Start Apache without nounset
+
+- `set -u` in `apache-init.sh` aborted on `/etc/apache2/envvars` (`APACHE_CONFDIR` is read before it is set). Supervisor then marked apache2 FATAL
+- Source envvars with nounset off, then exec apache2
+
 * 2026-09-27 09:03 AEST - Skip Observium MIBs in `make scan`
 
 - `trivy.yaml` `skip-dirs` for `/opt/observium/mibs`. Vendor SNMP MIBs contain example PEM blocks; they are not keys
