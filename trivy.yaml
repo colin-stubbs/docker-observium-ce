@@ -1,0 +1,7 @@
+# Observium CE ships vendor SNMP MIBs with example PEM blocks in comments.
+# Those are not secrets. The tree is also large enough to trip Trivy's secret
+# scanner (AFFIRMED-ZONE-MIB ~13MB).
+scan:
+  skip-dirs:
+    - /opt/observium/mibs
+    - opt/observium/mibs
